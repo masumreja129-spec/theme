@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Now Playing</title>
+<style>
+  :root{
+    --bg-deep:#081714;
+    --bg-surface:#0F241F;
+    --teal:#12B8A6;
+    --teal-soft:#0E8C80;
+    --leaf:#5FD97A;
+    --white:#FFFFFF;
+    --muted:#8FA89F;
+    --muted-dim:#5E756E;
+  }
+
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; }
+  html,body{
+    margin:0; padding:0; height:100%;
+    background:var(--bg-deep);
+    font-family:-apple-system,"Segoe UI",Roboto,Inter,sans-serif;
+    overflow:hidden;
+    color:var(--white);
+  }
+
+  .app-shell{ position:relative; width:100%; height:100vh; overflow:hidden; }
+
+  /* ================= ANIMATED NATURAL BACKGROUND (GPU-only, no lag) ================= */
+  .bg-layer{ position:absolute; inset:0; overflow:hidden; z-index:0; }
+  .blob{ position:absolute; border-radius:50%; filter:blur(60px); opacity:.55; will-change:transform; mix-blend-mode:screen; }
+  .blob-a{ width:320px; height:320px; left:-80px; top:-60px; background:radial-gradient(circle at 30% 30%, var(--teal), transparent 70%); animation:drift1 18s ease-in-out infinite; }
+  .blob-b{ width:280px; height:280px; right:-90px; top:120px; background:radial-gradient(circle at 60% 40%, var(--leaf), transparent 70%); animation:drift2 22s ease-in-out infinite; }
+  .blob-c{ width:340px; height:340px; left:20px; bottom:-140px; background:radial-gradient(circle at 50% 50%, var(--teal-soft), transparent 70%); animation:drift3 26s ease-in-out infinite; }
+  .vignette{ position:absolute; inset:0; background:radial-gradient(ellipse at center, transparent 40%, rgba(3,10,8,.75) 100%); pointer-events:none; z-index:2; }
+  @keyframes drift1{ 0%,100%{ transform:translate(0,0) scale(1);} 50%{ transform:translate(40px,60px) scale(1.15);} }
+  @keyframes drift2{ 0%,100%{ transform:translate(0,0) scale(1);} 50%{ transform:translate(-50px,40px) scale(1.1);} }
+  @keyframes drift3{ 0%,100%{ transform:translate(0,0) scale(1);} 50%{ transform:translate(30px,-50px) scale(1.2);} }
+
+  /* ================= NATURE SCENE — swaying branch + idle bird + leaf dew-drop ================= */
+  .nature-scene{ position:absolute; top:-6px; right:-10px; width:190px; height:190px; z-index:1; pointer-events:none; opacity:.92; }
+  .branch-group{ transform-origin:100% 8%; animation:branchSway 6.5s ease-in-out infinite; }
+  .leaf-group{ transform-origin:100% 8%; animation:leafSway 4.2s ease-in-out infinite; }
+  @keyframes branchSway{ 0%,100%{ transform:rotate(-2.2deg);} 50%{ transform:rotate(2deg);} }
+  @keyframes leafSway{ 0%,100%{ transform:rotate(-3.5deg);} 50%{ transform:rotate(3deg);} }
+
+  .bird-group{ transform-origin:50% 90%; animation:birdBob 2.6s ease-in-out infinite; }
+  @keyframes birdBob{ 0%,100%{ transform:translateY(0);} 50%{ transform:translateY(-1.6px);} }
+  .bird-head{ transform-origin:50% 65%; animation:birdLook 7s ease-in-out infinite; }
+  @keyframes birdLook{
+    0%,40%{ transform:rotate(0deg);}
+    46%{ transform:rotate(-9deg);}
+    52%{ transform:rotate(-9deg);}
+    58%{ transform:rotate(0deg);}
+    100%{ transform:rotate(0deg);}
+  }
+  .bird-eye{ transform-origin:center; animation:birdBlink 4.5s ease-in-out infinite; }
+  @keyframes birdBlink{ 0%,92%,100%{ transform:scaleY(1);} 95%{ transform:scaleY(0.12);} }
+  .bird-tail{ transform-origin:100% 50%; animation:tailFlick 3.1s ease-in-out infinite; }
+  @keyframes tailFlick{ 0%,100%{ transform:rotate(0deg);} 50%{ transform:rotate(4deg);} }
+
+  .dew-drop{ opacity:0; animation:dewFall 5.5s ease-in cubic-bezier(.55,0,1,.45) infinite; animation-delay:1.8s; }
+  @keyframes dewFall{
+    0%{ opacity:0; transform:translateY(0) scale(.55,.75); }
+    6%{ opacity:1; transform:translateY(0) scale(.9,.7); }
+    70%{ opacity:1; transform:translateY(20px) scale(1,1.25); }
+    82%{ opacity:.9; transform:translateY(26px) scale(1.15,.7); }
+    92%{ opacity:0; transform:translateY(30px) scale(.4,.4); }
+    100%{ opacity:0; transform:translateY(30px) scale(.4,.4); }
+  }
+  .dew-ripple{ opacity:0; animation:dewRipple 5.5s ease-out infinite; animation-delay:2.5s; }
+  @keyframes dewRipple{
+    0%,74%{ opacity:0; transform:scale(.3); }
+    78%{ opacity:.55; transform:scale(.5); }
+    92%{ opacity:0; transform:scale(1.6); }
+    100%{ opacity:0; transform:scale(1.6); }
+  }
+
+  /* ================= TIMELY RAIN (periodic, lightweight) ================= */
+  .rain-layer{ position:absolute; inset:0; z-index:1; pointer-events:none; opacity:0; transition:opacity 1.4s ease; }
+  .rain-layer.active{ opacity:1; }
+  .drop{ position:absolute; top:-40px; width:1.5px; height:60px; background:linear-gradient(to bottom, transparent, rgba(180,235,225,.55)); animation-name:fall; animation-timing-function:linear; animation-iteration-count:infinite; }
+  @keyframes fall{ 0%{ transform:translateY(-10%) translateX(0); opacity:0;} 10%{ opacity:1;} 100%{ transform:translateY(115vh) translateX(-18px); opacity:.2;} }
+  .ripple-glow{ position:absolute; inset:0; background:radial-gradient(ellipse at 50% 100%, rgba(18,184,166,.10), transparent 60%); opacity:0; transition:opacity 2s ease; }
+  .rain-layer.active .ripple-glow{ opacity:1; }
+
+  /* ================= CONTENT ================= */
+  .content{ position:relative; z-index:3; height:100%; display:flex; flex-direction:column; padding:22px 24px 28px; }
+
+  .topbar{ display:flex; align-items:center; justify-content:space-between; }
+  .topbar-actions{ display:flex; align-items:center; gap:8px; }
+  .icon-btn{ width:38px; height:38px; border-radius:12px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.08); color:var(--white); }
+  .eyebrow{ font-size:11px; letter-spacing:3px; font-weight:600; color:var(--muted); text-transform:uppercase; }
+
+  .art-wrap{ margin:30px auto 0; width:250px; height:250px; position:relative; }
+  .art-glow{ position:absolute; inset:-14px; border-radius:34px; background:conic-gradient(from 0deg, var(--teal), var(--leaf), var(--teal-soft), var(--teal)); filter:blur(22px); opacity:.55; animation:spin 10s linear infinite; }
+  .art{ position:relative; width:100%; height:100%; border-radius:26px; background-size:cover; background-position:center;
+        background-color:transparent;
+        box-shadow:0 20px 40px rgba(0,0,0,.5); display:flex; align-items:center; justify-content:center; animation:breathe 6s ease-in-out infinite; overflow:hidden; }
+  .art.placeholder{ background-image:none;
+        background:
+          radial-gradient(circle at 30% 20%, #2E9E52 0%, transparent 45%),
+          radial-gradient(circle at 75% 70%, #12B8A6 0%, transparent 50%),
+          linear-gradient(160deg, #0F241F, #061410); }
+  .art svg{ width:64px; height:64px; opacity:.35; }
+  @keyframes spin{ to{ transform:rotate(360deg);} }
+  @keyframes breathe{ 0%,100%{ transform:scale(1);} 50%{ transform:scale(1.015);} }
+
+  .track-info{ text-align:center; margin-top:26px; }
+  .track-title{ font-size:21px; font-weight:700; color:var(--white); letter-spacing:.2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .track-artist{ font-size:13.5px; color:var(--muted); margin-top:5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  .viz{ display:flex; align-items:flex-end; gap:3px; height:34px; margin:22px 6px 4px; justify-content:center; }
+  .viz span{ width:4px; border-radius:2px; background:linear-gradient(to top, var(--teal-soft), var(--leaf)); animation:bounce 1.1s ease-in-out infinite; }
+  .viz.paused span{ animation-play-state:paused; opacity:.35; }
+  @keyframes bounce{ 0%,100%{ height:20%;} 50%{ height:100%;} }
+
+  .seek-row{ display:flex; align-items:center; gap:10px; margin-top:14px; }
+  .time{ font-size:11px; color:var(--muted-dim); width:34px; }
+  .time.now{ color:var(--white); }
+  .track-bar{ flex:1; height:22px; display:flex; align-items:center; position:relative; touch-action:none; }
+  .track-bar-bg{ position:absolute; left:0; right:0; height:4px; border-radius:3px; background:rgba(255,255,255,.08); }
+  .track-fill{ position:absolute; left:0; top:50%; transform:translateY(-50%); height:4px; width:0%; border-radius:3px; background:linear-gradient(to right, var(--teal-soft), var(--leaf)); }
+  .track-thumb{ position:absolute; left:0%; top:50%; transform:translate(-50%,-50%); width:14px; height:14px; background:var(--white); border-radius:70% 30% 65% 35% / 60% 40% 60% 40%; box-shadow:0 0 10px rgba(95,217,122,.8); }
+
+  .controls{ display:flex; align-items:center; justify-content:space-between; margin-top:30px; padding:0 6px; }
+  .ctrl-btn{ background:none; border:none; color:var(--muted); display:flex; align-items:center; justify-content:center; padding:8px; }
+  .ctrl-btn.small{ width:34px; height:34px; }
+  .ctrl-btn.mid{ width:46px; height:46px; color:var(--white); }
+  .ctrl-btn.active{ color:var(--leaf); background:rgba(95,217,122,.14); border-radius:10px; }
+
+  .play-btn{ width:70px; height:70px; border:none; cursor:pointer; background:linear-gradient(150deg, var(--leaf), var(--teal));
+    border-radius:42% 58% 63% 37% / 46% 40% 60% 54%; display:flex; align-items:center; justify-content:center;
+    box-shadow:0 8px 24px rgba(18,184,166,.45); position:relative; transition:transform .18s ease; }
+  .play-btn::after{ content:""; position:absolute; inset:-8px; border-radius:inherit; border:1.5px solid rgba(95,217,122,.35); animation:pulseRing 2.6s ease-out infinite; }
+  .play-btn.paused::after{ animation-play-state:paused; opacity:0; }
+  .play-btn:active{ transform:scale(.93); }
+  @keyframes pulseRing{ 0%{ transform:scale(.9); opacity:.7;} 100%{ transform:scale(1.35); opacity:0;} }
+
+  .bottom-row{ display:flex; align-items:center; justify-content:space-between; margin-top:26px; }
+  .pill-btn{ display:flex; align-items:center; gap:6px; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.08);
+    padding:8px 14px; border-radius:20px; color:var(--muted); font-size:12px; }
+  .pill-btn.liked{ color:var(--leaf); border-color:rgba(95,217,122,.4); background:rgba(95,217,122,.08); }
+
+  /* ================= QUEUE PANEL ================= */
+  .queue-backdrop{ position:fixed; inset:0; background:rgba(3,10,8,.6); opacity:0; pointer-events:none; transition:opacity .25s ease; z-index:4; }
+  .queue-backdrop.open{ opacity:1; pointer-events:auto; }
+
+  .queue-panel{ position:fixed; left:0; right:0; bottom:0; max-height:62vh; background:var(--bg-surface);
+    border-radius:22px 22px 0 0; transform:translateY(100%); transition:transform .3s cubic-bezier(.2,.8,.3,1);
+    z-index:5; display:flex; flex-direction:column; box-shadow:0 -12px 30px rgba(0,0,0,.5); }
+  .queue-panel.open{ transform:translateY(0); }
+
+  .queue-handle{ width:38px; height:4px; border-radius:3px; background:rgba(255,255,255,.18); margin:10px auto 4px; }
+  .queue-header{ display:flex; align-items:center; justify-content:space-between; padding:8px 18px 10px; }
+  .queue-title{ font-size:15px; font-weight:700; color:var(--white); }
+  .queue-close{ width:30px; height:30px; border-radius:10px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,.06); color:var(--muted); }
+
+  .queue-list{ overflow-y:auto; padding:2px 8px 18px; }
+  .queue-row{ display:flex; align-items:center; gap:10px; padding:10px 10px; border-radius:12px; }
+  .queue-row .qnum{ width:22px; font-size:12px; color:var(--muted-dim); text-align:center; }
+  .queue-row .qinfo{ flex:1; min-width:0; }
+  .queue-row .qtitle{ font-size:13.5px; color:var(--white); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .queue-row .qsubtitle{ font-size:11.5px; color:var(--muted); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .queue-row .qdot{ width:7px; height:7px; border-radius:50%; background:var(--leaf); opacity:0; flex-shrink:0; }
+
+  .queue-row.playing{ background:rgba(95,217,122,.12); }
+  .queue-row.playing .qtitle{ color:var(--leaf); }
+  .queue-row.playing .qnum{ color:var(--leaf); }
+  .queue-row.playing .qdot{ opacity:1; }
+
+  .queue-empty{ text-align:center; color:var(--muted-dim); font-size:12.5px; padding:24px 0; }
+</style>
+</head>
+<body>
+
+<div class="app-shell" id="shell">
+
+  <div class="bg-layer">
+    <div class="blob blob-a"></div>
+    <div class="blob blob-b"></div>
+    <div class="blob blob-c"></div>
+  </div>
+
+  <!-- ✅ Nature scene: swaying branch + idle bird + dripping dew drop -->
+  <svg class="nature-scene" viewBox="0 0 190 190" xmlns="http://www.w3.org/2000/svg">
+    <g class="branch-group">
+      <path d="M190,14 C150,10 110,26 78,52" fill="none" stroke="#4A3626" stroke-width="5" stroke-linecap="round"/>
+      <path d="M190,14 C150,10 110,26 78,52" fill="none" stroke="#5C4531" stroke-width="2" stroke-linecap="round" opacity=".6"/>
+
+      <g class="leaf-group">
+        <path d="M96,40 C86,28 68,26 58,34 C68,40 82,46 96,40 Z" fill="#2E9E52" opacity=".92"/>
+        <path d="M120,26 C112,14 94,10 84,18 C94,26 108,32 120,26 Z" fill="#379E5A" opacity=".92"/>
+        <path d="M150,18 C142,7 124,4 114,11 C124,18 138,24 150,18 Z" fill="#2E9E52" opacity=".9"/>
+      </g>
+
+      <!-- bird perched near the tip of the branch -->
+      <g class="bird-group" transform="translate(60,52)">
+        <path class="bird-tail" d="M0,4 C-11,1 -17,-4 -19,-9 C-13,-6 -5,-3 1,2 Z" fill="#0E8C80"/>
+        <ellipse cx="10" cy="0" rx="13" ry="10" fill="#12B8A6"/>
+        <g class="bird-head" transform="translate(19,-9)">
+          <circle cx="0" cy="0" r="7.5" fill="#5FD97A"/>
+          <path d="M6.5,0 L13,-1.5 L6.5,3 Z" fill="#E8B84B"/>
+          <ellipse class="bird-eye" cx="1.5" cy="-1.5" rx="1.4" ry="1.6" fill="#04150F"/>
+        </g>
+      </g>
+    </g>
+
+    <!-- dew drop rolling off a leaf tip and falling -->
+    <g transform="translate(58,36)">
+      <path class="dew-drop" d="M0,0 C1.6,2 2.6,3.8 2.6,5.4 C2.6,7.2 1.4,8.4 0,8.4 C-1.4,8.4 -2.6,7.2 -2.6,5.4 C-2.6,3.8 -1.6,2 0,0 Z" fill="#BFEFE4"/>
+      <ellipse class="dew-ripple" cx="0" cy="30" rx="7" ry="2.4" fill="none" stroke="#7FD9C7" stroke-width="1"/>
+    </g>
+  </svg>
+
+  <div class="rain-layer" id="rainLayer"><div class="ripple-glow"></div></div>
+  <div class="vignette"></div>
+
+  <div class="content">
+
+    <div class="topbar">
+      <div class="icon-btn" id="btnCollapse">
+        <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </div>
+      <div class="eyebrow">Now Playing</div>
+      <div class="topbar-actions">
+        <div class="icon-btn" id="btnEqualizer">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+        </div>
+        <div class="icon-btn" id="btnTheme">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.5-.7 1.5-1.5 0-.4-.2-.8-.4-1.1-.2-.3-.4-.6-.4-1 0-.8.7-1.5 1.5-1.5H16c3.3 0 6-2.7 6-6 0-4.9-4.5-9-10-9z"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="art-wrap">
+      <div class="art-glow"></div>
+      <div class="art placeholder" id="art">
+        <svg viewBox="0 0 24 24" width="64" height="64" fill="none" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+      </div>
+    </div>
+
+    <div class="track-info">
+      <div class="track-title" id="trackTitle">Loading…</div>
+      <div class="track-artist" id="trackArtist"></div>
+    </div>
+
+    <div class="viz paused" id="viz"></div>
+
+    <div class="seek-row">
+      <div class="time now" id="timeNow">0:00</div>
+      <div class="track-bar" id="seekBar">
+        <div class="track-bar-bg"></div>
+        <div class="track-fill" id="trackFill"></div>
+        <div class="track-thumb" id="trackThumb"></div>
+      </div>
+      <div class="time" id="timeTotal">0:00</div>
+    </div>
+
+    <div class="controls">
+      <button class="ctrl-btn small" id="btnShuffle">
+        <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+      </button>
+      <button class="ctrl-btn mid" id="btnPrev">
+        <svg viewBox="0 0 24 24" width="25" height="25" fill="currentColor"><polygon points="19 20 9 12 19 4 19 20"/><rect x="5" y="4" width="2" height="16"/></svg>
+      </button>
+      <button class="play-btn paused" id="btnPlay">
+        <svg id="playIcon" viewBox="0 0 24 24" width="26" height="26" fill="#04150F"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+      </button>
+      <button class="ctrl-btn mid" id="btnNext">
+        <svg viewBox="0 0 24 24" width="25" height="25" fill="currentColor"><polygon points="5 4 15 12 5 20 5 4"/><rect x="17" y="4" width="2" height="16"/></svg>
+      </button>
+      <button class="ctrl-btn small" id="btnRepeatOne">
+        <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/><text x="10.5" y="14.5" font-size="7" stroke="none" fill="currentColor">1</text></svg>
+      </button>
+    </div>
+
+    <div class="bottom-row">
+      <div class="pill-btn" id="btnFavorite">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+        <span id="favLabel">Save</span>
+      </div>
+      <div class="pill-btn" id="btnQueue">
+        Queue
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ✅ Queue panel -->
+  <div class="queue-backdrop" id="queueBackdrop"></div>
+  <div class="queue-panel" id="queuePanel">
+    <div class="queue-handle"></div>
+    <div class="queue-header">
+      <div class="queue-title">Up Next</div>
+      <div class="queue-close" id="btnQueueClose">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </div>
+    </div>
+    <div class="queue-list" id="queueList">
+      <div class="queue-empty">Loading queue…</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // ---- Visualizer bars: ambient CSS animation (idle look, no per-frame JS) ----
+  var viz = document.getElementById('viz');
+  for (var i = 0; i < 26; i++) {
+    var bar = document.createElement('span');
+    bar.style.animationDelay = (Math.random()*1.1).toFixed(2)+'s';
+    bar.style.animationDuration = (0.8 + Math.random()*0.8).toFixed(2)+'s';
+    viz.appendChild(bar);
+  }
+
+  function fmt(ms){
+    var totalSec = Math.max(0, Math.floor(ms/1000));
+    var m = Math.floor(totalSec/60);
+    var s = totalSec % 60;
+    return m + ':' + (s < 10 ? '0'+s : s);
+  }
+
+  function callAndroid(fn, arg){
+    if (window.AndroidPlayer && typeof window.AndroidPlayer[fn] === 'function') {
+      if (arg === undefined) window.AndroidPlayer[fn]();
+      else window.AndroidPlayer[fn](arg);
+    }
+  }
+
+  // ---- State pushed from Android ----
+  var duration = 0;
+  var isSeeking = false;
+  var isFavorite = false;
+
+  var trackTitle = document.getElementById('trackTitle');
+  var trackArtist = document.getElementById('trackArtist');
+  var timeNow = document.getElementById('timeNow');
+  var timeTotal = document.getElementById('timeTotal');
+  var trackFill = document.getElementById('trackFill');
+  var trackThumb = document.getElementById('trackThumb');
+  var playIcon = document.getElementById('playIcon');
+  var btnPlay = document.getElementById('btnPlay');
+  var vizEl = document.getElementById('viz');
+  var favLabel = document.getElementById('favLabel');
+  var btnFavorite = document.getElementById('btnFavorite');
+  var btnShuffle = document.getElementById('btnShuffle');
+  var btnRepeatOne = document.getElementById('btnRepeatOne');
+  var artEl = document.getElementById('art');
+
+  function setSeekPercent(pct){
+    pct = Math.max(0, Math.min(100, pct));
+    trackFill.style.width = pct + '%';
+    trackThumb.style.left = pct + '%';
+  }
+
+  // Called by Android after every state tick
+  window.updatePlayerState = function(title, artist, playing, positionMs, durationMs, favorite, shuffleActive, repeatOneActive){
+    trackTitle.textContent = title || 'Unknown track';
+    trackArtist.textContent = artist || '';
+    duration = durationMs || 0;
+    isFavorite = !!favorite;
+
+    btnFavorite.classList.toggle('liked', isFavorite);
+    favLabel.textContent = isFavorite ? 'Saved' : 'Save';
+
+    // ✅ Active/inactive color state — leaf-green highlight when on, muted grey when off
+    btnShuffle.classList.toggle('active', !!shuffleActive);
+    btnRepeatOne.classList.toggle('active', !!repeatOneActive);
+
+    if (!isSeeking) {
+      timeNow.textContent = fmt(positionMs);
+      timeTotal.textContent = fmt(duration);
+      setSeekPercent(duration > 0 ? (positionMs/duration*100) : 0);
+    }
+
+    playIcon.innerHTML = playing
+      ? '<rect x="6" y="4" width="4.5" height="16" rx="1"/><rect x="13.5" y="4" width="4.5" height="16" rx="1"/>'
+      : '<polygon points="6 3 20 12 6 21 6 3"/>';
+    btnPlay.classList.toggle('paused', !playing);
+    vizEl.classList.toggle('paused', !playing);
+  };
+
+  // Called by Android once per track change (base64 JPEG, or "" for placeholder)
+  window.updatePlayerArtwork = function(base64Jpeg){
+    if (base64Jpeg && base64Jpeg.length > 0) {
+      artEl.classList.remove('placeholder');
+      artEl.style.backgroundImage = 'url(data:image/jpeg;base64,' + base64Jpeg + ')';
+      artEl.querySelector('svg').style.display = 'none';
+    } else {
+      artEl.classList.add('placeholder');
+      artEl.style.backgroundImage = 'none';
+      artEl.querySelector('svg').style.display = '';
+    }
+  };
+
+  // ---- Controls -> Android bridge ----
+  btnPlay.addEventListener('click', function(){ callAndroid('onPlayPause'); });
+  document.getElementById('btnNext').addEventListener('click', function(){ callAndroid('onNext'); });
+  document.getElementById('btnPrev').addEventListener('click', function(){ callAndroid('onPrevious'); });
+  btnShuffle.addEventListener('click', function(){ callAndroid('onShuffleToggle'); });
+  btnRepeatOne.addEventListener('click', function(){ callAndroid('onRepeatOneToggle'); });
+  btnFavorite.addEventListener('click', function(){ callAndroid('onFavoriteToggle'); });
+  document.getElementById('btnCollapse').addEventListener('click', function(){ callAndroid('onCollapse'); });
+  document.getElementById('btnEqualizer').addEventListener('click', function(){ callAndroid('onEqualizer'); });
+  document.getElementById('btnTheme').addEventListener('click', function(){ callAndroid('onTheme'); });
+
+  // ---- Draggable seek bar (pointer events, cheap) ----
+  var seekBar = document.getElementById('seekBar');
+  function pctFromEvent(e){
+    var rect = seekBar.getBoundingClientRect();
+    var x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+    return Math.max(0, Math.min(100, (x/rect.width)*100));
+  }
+  function seekStart(e){
+    isSeeking = true;
+    seekMove(e);
+  }
+  function seekMove(e){
+    if (!isSeeking) return;
+    var pct = pctFromEvent(e);
+    setSeekPercent(pct);
+    timeNow.textContent = fmt(duration * pct/100);
+  }
+  function seekEnd(e){
+    if (!isSeeking) return;
+    var pct = pctFromEvent(e);
+    isSeeking = false;
+    var posMs = Math.round(duration * pct/100);
+    callAndroid('onSeek', posMs);
+  }
+  seekBar.addEventListener('pointerdown', seekStart);
+  seekBar.addEventListener('pointermove', seekMove);
+  seekBar.addEventListener('pointerup', seekEnd);
+  seekBar.addEventListener('pointercancel', seekEnd);
+
+  // ---- ✅ Queue panel ----
+  var queuePanel = document.getElementById('queuePanel');
+  var queueBackdrop = document.getElementById('queueBackdrop');
+  var queueList = document.getElementById('queueList');
+  var btnQueue = document.getElementById('btnQueue');
+  var btnQueueClose = document.getElementById('btnQueueClose');
+
+  function openQueue(){
+    queuePanel.classList.add('open');
+    queueBackdrop.classList.add('open');
+    callAndroid('onQueue'); // Android pushes fresh data via window.updateQueue(...)
+  }
+  function closeQueue(){
+    queuePanel.classList.remove('open');
+    queueBackdrop.classList.remove('open');
+  }
+  btnQueue.addEventListener('click', openQueue);
+  btnQueueClose.addEventListener('click', closeQueue);
+  queueBackdrop.addEventListener('click', closeQueue);
+
+  function escapeHtml(s){
+    var d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+  }
+
+  // Called by Android: itemsJson = [{title, subtitle}, ...], currentIndex = which one is playing
+  window.updateQueue = function(items, currentIndex){
+    queueList.innerHTML = '';
+    if (!items || items.length === 0) {
+      queueList.innerHTML = '<div class="queue-empty">Queue is empty</div>';
+      return;
+    }
+    for (var i = 0; i < items.length; i++) {
+      (function(i){
+        var item = items[i];
+        var row = document.createElement('div');
+        row.className = 'queue-row' + (i === currentIndex ? ' playing' : '');
+
+        var num = document.createElement('div');
+        num.className = 'qnum';
+        num.textContent = (i + 1 < 10 ? '0' : '') + (i + 1);
+
+        var info = document.createElement('div');
+        info.className = 'qinfo';
+        info.innerHTML = '<div class="qtitle">' + escapeHtml(item.title) + '</div>'
+          + '<div class="qsubtitle">' + escapeHtml(item.subtitle) + '</div>';
+
+        var dot = document.createElement('div');
+        dot.className = 'qdot';
+
+        row.appendChild(num);
+        row.appendChild(info);
+        row.appendChild(dot);
+
+        row.addEventListener('click', function(){
+          if (i === currentIndex) { closeQueue(); return; }
+          callAndroid('onQueueItemSelect', i);
+          closeQueue();
+        });
+
+        queueList.appendChild(row);
+      })(i);
+    }
+  };
+
+  // ---- Timely rain: appears periodically, lightweight, self-cleaning ----
+  var rainLayer = document.getElementById('rainLayer');
+  var dropPool = [];
+  function startRain(){
+    rainLayer.classList.add('active');
+    for (var i = 0; i < 20; i++) {
+      var d = document.createElement('div');
+      d.className = 'drop';
+      d.style.left = Math.random()*100+'%';
+      d.style.animationDuration = (0.9 + Math.random()*0.7)+'s';
+      d.style.animationDelay = (Math.random()*2)+'s';
+      d.style.opacity = (0.4 + Math.random()*0.5).toFixed(2);
+      rainLayer.appendChild(d);
+      dropPool.push(d);
+    }
+  }
+  function stopRain(){
+    rainLayer.classList.remove('active');
+    setTimeout(function(){
+      dropPool.forEach(function(d){ d.remove(); });
+      dropPool = [];
+    }, 1500);
+  }
+  function rainCycle(){ startRain(); setTimeout(stopRain, 9000); }
+  setTimeout(rainCycle, 4000);
+  setInterval(rainCycle, 90000);
+</script>
+
+</body>
+</html>
