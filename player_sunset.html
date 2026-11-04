@@ -81,6 +81,8 @@
   .viz{ display:flex; align-items:flex-end; justify-content:center; gap:3px; height:30px; margin:2vh 6px 0; }
   .viz span{ width:4px; border-radius:2px; background:linear-gradient(to top, var(--orange), var(--gold)); animation:bounce 1.1s ease-in-out infinite; }
   .viz.paused span{ animation-play-state:paused; opacity:.35; }
+  /* real FFT mode: CSS animation off, JS drives the height */
+  .viz.live span{ animation:none; height:6%; transition:height .08s linear; }
   @keyframes bounce{ 0%,100%{ height:18%;} 50%{ height:100%;} }
 
   .seek-row{ display:flex; align-items:center; gap:10px; margin-top:2vh; }
@@ -214,14 +216,32 @@
 </div>
 
 <script>
-  // ---- ambient visualizer bars ----
+  // ---- visualizer bars (real FFT data from Android; CSS animation is only a fallback) ----
   var viz = document.getElementById('viz');
+  var vizBars = [];
   for (var i = 0; i < 26; i++) {
     var b = document.createElement('span');
     b.style.animationDelay = (Math.random()*1.1).toFixed(2)+'s';
     b.style.animationDuration = (0.8 + Math.random()*0.8).toFixed(2)+'s';
     viz.appendChild(b);
+    vizBars.push(b);
   }
+
+  // Called by Android ~30x/sec with 26 values (0..100)
+  var vizTimer = null;
+  window.updateViz = function(arr){
+    if (!arr) return;
+    viz.classList.add('live');
+    for (var i = 0; i < vizBars.length; i++) {
+      vizBars[i].style.height = Math.max(6, arr[i] || 0) + '%';
+    }
+    clearTimeout(vizTimer);
+    // If data stops (permission denied / visualizer released) -> fall back to fake animation
+    vizTimer = setTimeout(function(){
+      viz.classList.remove('live');
+      for (var j = 0; j < vizBars.length; j++) vizBars[j].style.height = '';
+    }, 1500);
+  };
 
   function fmt(ms){
     var t = Math.max(0, Math.floor(ms/1000)), m = Math.floor(t/60), s = t % 60;
