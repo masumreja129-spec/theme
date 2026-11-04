@@ -1,8 +1,8 @@
 {
   "themes": [
     { "id": "sunset", "name": "Sunset", "version": 1,
-      "html": "https://masumreja129-spec.github.io/theme/player_teal.html",
-      "preview": "https://masumreja129-spec.github.io/theme/prev_teal.jpg",
+      "html": "https://masumreja129-spec.github.io/theme/player_sunset.html",
+      "preview": "https://masumreja129-spec.github.io/theme/prev_sunset.jpg",
       "accent": "#FF7043", "bg": "#1A0F0B" }
   ]
 }
